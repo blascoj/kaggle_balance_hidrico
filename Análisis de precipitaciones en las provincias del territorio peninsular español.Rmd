@@ -1,0 +1,422 @@
+---
+title: "Análisis de precipitaciones en las provincias del territorio peninsular español."
+author: "Josep Blasco Domínguez"
+date: "2023-04-08"
+output: 
+  html_document: 
+    toc: yes
+---
+
+# 1. Planteamiento inicial.
+En esta ocasión trabajaré en un análisis de las precipitaciones en las provincias del territorio peninsular español para los años 2019, 2020 y 2021. 
+
+## 1.1. Librerias
+```{r, label = librerias, message=FALSE }
+library(readr) #Leer datos
+library(tidyverse) #Preparar datos
+library(sf) #Trabajar con datos espaciales
+library(stars) #Trabajar con datos espaciales
+library(terra) #Trabajar con datos espaciales
+
+```
+
+# 2. Datos.
+## 2.1. Fuente
+Los datos que emplearé pertenecen a la Agencia Estatal de Meteorología (AEMET), organismo público español encargado de la gestión y prestación de servicios meteorológicos y climáticos. AEMET se dedica a la observación, predicción, elaboración y difusión de información meteorológica y climática en España.
+
+Al tratarse de *Open Data* se encuentran disponibles en: https://www.aemet.es/es/datos_abiertos/estadisticas/balance_hidrico
+
+## 2.2. Estructuración y preparaación de los datos
+### 2.2.1. Los datos de AEMET
+Emplearemos los datasets referentes a las **precipitaciones** por **provincias**, dejando, por el momento, el resto de datasets y variables.
+
+Por ello, adjunto los dataset iniciales 
+
+- PREC_1981_2010_Provincias. Media mensual de los años 1981-2010 (datos base como referencia de precipitaciones normales)
+- PREC_2019_Provincias. Media mensual del año 2019.
+- PREC_2020_Provincias. Media mensual del año 2020.
+- PREC_2021_Provincias. Media mensual del año 2021.
+
+
+```{r label = importar_data, message=FALSE}
+#Importamos data
+
+PREC_1981_2010_Provincias <- read_delim("PREC_1981_2010_Provincias.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+PREC_2019_Provincias <- read_delim("PREC_2019_Provincias.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+PREC_2020_Provincias <- read_delim("PREC_2020_Provincias.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+PREC_2021_Provincias <- read_delim("PREC_2021_Provincias.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE)
+```
+Las tuplas de estos dataset resultan de la observación mensual de precipitaciones en las provincias del territorio español. Se incluyen en los datasets Ceuta, Melilla y las Islas Canarias. Por su parte, las precipitaciones se miden como la precipitación acuosa acumulada media mensualenen en mm. 
+
+A continuación empezamos a modificar estos dataset para su posterior análisis. Primero, vamos a establecer fechas en aquellas variables (columnas) que aparecen con el mes del año.
+
+**Nota**: este paso se puede realizar mediante la función case_when(), lo que ahorraría realizar después la selección de variables relevantes.
+
+```{r, label = fechas}
+#Nuevos conjuntos de datos como data.frame
+data_base <- as.data.frame(PREC_1981_2010_Provincias)
+data_2019 <- as.data.frame(PREC_2019_Provincias)
+data_2020 <- as.data.frame(PREC_2020_Provincias)
+data_2021 <- as.data.frame(PREC_2021_Provincias)
+
+#Establecemos fechas y nos quedamos con las variables relevantes para los datasets anuales.
+
+##2019
+data_2019$"15/01/2019" <- data_2019$enero
+data_2019$"15/02/2019" <- data_2019$febrero
+data_2019$"15/03/2019" <- data_2019$marzo
+data_2019$"15/04/2019" <- data_2019$abril
+data_2019$"15/05/2019" <- data_2019$mayo
+data_2019$"15/06/2019" <- data_2019$junio
+data_2019$"15/07/2019" <- data_2019$julio
+data_2019$"15/08/2019" <- data_2019$agosto
+data_2019$"15/09/2019" <- data_2019$septiembre
+data_2019$"15/10/2019" <- data_2019$octubre
+data_2019$"15/11/2019" <- data_2019$noviembre
+data_2019$"15/12/2019" <- data_2019$diciembre
+
+data_2019 <- select(data_2019,"region","15/01/2019", "15/02/2019","15/03/2019","15/04/2019","15/05/2019",
+                    "15/06/2019","15/07/2019","15/08/2019","15/09/2019","15/10/2019","15/11/2019",
+                    "15/12/2019" )
+##2020
+data_2020$"15/01/2020" <- data_2020$enero
+data_2020$"15/02/2020" <- data_2020$febrero
+data_2020$"15/03/2020" <- data_2020$marzo
+data_2020$"15/04/2020" <- data_2020$abril
+data_2020$"15/05/2020" <- data_2020$mayo
+data_2020$"15/06/2020" <- data_2020$junio
+data_2020$"15/07/2020" <- data_2020$julio
+data_2020$"15/08/2020" <- data_2020$agosto
+data_2020$"15/09/2020" <- data_2020$septiembre
+data_2020$"15/10/2020" <- data_2020$octubre
+data_2020$"15/11/2020" <- data_2020$noviembre
+data_2020$"15/12/2020" <- data_2020$diciembre
+
+data_2020 <- select(data_2020,"region","15/01/2020", "15/02/2020","15/03/2020","15/04/2020","15/05/2020",
+                    "15/06/2020","15/07/2020","15/08/2020","15/09/2020","15/10/2020","15/11/2020",
+                    "15/12/2020" )
+##2021
+data_2021$"15/01/2021" <- data_2021$enero
+data_2021$"15/02/2021" <- data_2021$febrero
+data_2021$"15/03/2021" <- data_2021$marzo
+data_2021$"15/04/2021" <- data_2021$abril
+data_2021$"15/05/2021" <- data_2021$mayo
+data_2021$"15/06/2021" <- data_2021$junio
+data_2021$"15/07/2021" <- data_2021$julio
+data_2021$"15/08/2021" <- data_2021$agosto
+data_2021$"15/09/2021" <- data_2021$septiembre
+data_2021$"15/10/2021" <- data_2021$octubre
+data_2021$"15/11/2021" <- data_2021$noviembre
+data_2021$"15/12/2021" <- data_2021$diciembre
+
+data_2021 <- select(data_2021,"region","15/01/2021", "15/02/2021","15/03/2021","15/04/2021","15/05/2021",
+                    "15/06/2021","15/07/2021","15/08/2021","15/09/2021","15/10/2021","15/11/2021",
+                    "15/12/2021" )
+```
+Como segundo paso voy a incorporar una variable **id** a los dataset. Esta variable la he definido a partir de un orden particular, para posteriormente poder mapear los datos mediante un archivo *shape (.shp)*. Por tanto, recomiendo seguir rigurosamente el próximo paso y obtener la cohesión que he establecido para estos datasets.
+
+Aplicamos por tanto:
+1. Asignar códigos id a las provincias.
+2. Eliminar los nuevos NA que aparecen correspondientes a *Ceuta, Melilla e Islas Canarias (Las Palmas y Santa Cruz de Tenerife)*.
+3. Guardamos nuestro archivo
+
+```{r, label = id}
+#Primero, cambiamos la variable region por su correspondiente id
+
+##base
+data_base <- data_base %>%
+  mutate(region = case_when(region =="A CORUNA" ~ "15",
+                            region =="ALBACETE" ~ "2",
+                            region =="ALICANTE" ~ "3",
+                            region =="ALMERIA" ~ "4",
+                            region =="ARABA" ~ "1",
+                            region =="ASTURIAS" ~ "33",
+                            region =="AVILA" ~ "5",
+                            region =="BADAJOZ" ~ "6",
+                            region =="ILLES BALEARS" ~ "7",
+                            region =="BARCELONA" ~ "8",
+                            region =="BIZKAIA" ~ "46",
+                            region =="BURGOS" ~ "9",
+                            region =="CACERES" ~ "10",
+                            region =="CADIZ" ~ "11",
+                            region =="CANTABRIA" ~ "37",
+                            region =="CASTELLON" ~ "12",
+                            region =="CIUDAD REAL" ~ "13",
+                            region =="CORDOBA" ~ "14",
+                            region =="CUENCA" ~ "16",
+                            region =="GIPUZKOA" ~ "20",
+                            region =="GIRONA" ~ "17",
+                            region =="GRANADA" ~ "18",
+                            region =="GUADALAJARA" ~ "19",
+                            region =="HUELVA" ~ "21",
+                            region =="HUESCA" ~ "22",
+                            region =="JAEN" ~ "23",
+                            region =="LA RIOJA" ~ "26",
+                            region =="LEON" ~ "24",
+                            region =="LLEIDA" ~ "25",
+                            region =="LUGO" ~ "27",
+                            region =="MADRID" ~ "28",
+                            region =="MALAGA" ~ "29",
+                            region =="MURCIA" ~ "30",
+                            region =="NAVARRA" ~ "31",
+                            region =="OURENSE" ~ "32",
+                            region =="PALENCIA" ~ "34",
+                            region =="PONTEVEDRA" ~ "35",
+                            region =="SALAMANCA" ~ "36",
+                            region =="SEGOVIA" ~ "38",
+                            region =="SEVILLA" ~ "39",
+                            region =="SORIA" ~ "40",
+                            region =="TARRAGONA" ~ "41",
+                            region =="TERUEL" ~ "42",
+                            region =="TOLEDO" ~ "43",
+                            region =="VALENCIA" ~ "44",
+                            region =="VALLADOLID" ~ "45",
+                            region =="ZAMORA" ~ "47",
+                            region =="ZARAGOZA" ~ "48",
+    
+  ))
+
+# A continuación eliminamos Ceuta, Melilla e Islas Canarias
+data_base <- subset(data_base, region != is.na(region))
+#Guardamos nuestro dataset resultante
+write_csv(data_base, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_mkd/data_base.csv")
+
+##2019
+data_2019 <- data_2019 %>%
+  mutate(region = case_when(region =="A CORUNA" ~ "15",
+                            region =="ALBACETE" ~ "2",
+                            region =="ALICANTE" ~ "3",
+                            region =="ALMERIA" ~ "4",
+                            region =="ARABA" ~ "1",
+                            region =="ASTURIAS" ~ "33",
+                            region =="AVILA" ~ "5",
+                            region =="BADAJOZ" ~ "6",
+                            region =="ILLES BALEARS" ~ "7",
+                            region =="BARCELONA" ~ "8",
+                            region =="BIZKAIA" ~ "46",
+                            region =="BURGOS" ~ "9",
+                            region =="CACERES" ~ "10",
+                            region =="CADIZ" ~ "11",
+                            region =="CANTABRIA" ~ "37",
+                            region =="CASTELLON" ~ "12",
+                            region =="CIUDAD REAL" ~ "13",
+                            region =="CORDOBA" ~ "14",
+                            region =="CUENCA" ~ "16",
+                            region =="GIPUZKOA" ~ "20",
+                            region =="GIRONA" ~ "17",
+                            region =="GRANADA" ~ "18",
+                            region =="GUADALAJARA" ~ "19",
+                            region =="HUELVA" ~ "21",
+                            region =="HUESCA" ~ "22",
+                            region =="JAEN" ~ "23",
+                            region =="LA RIOJA" ~ "26",
+                            region =="LEON" ~ "24",
+                            region =="LLEIDA" ~ "25",
+                            region =="LUGO" ~ "27",
+                            region =="MADRID" ~ "28",
+                            region =="MALAGA" ~ "29",
+                            region =="MURCIA" ~ "30",
+                            region =="NAVARRA" ~ "31",
+                            region =="OURENSE" ~ "32",
+                            region =="PALENCIA" ~ "34",
+                            region =="PONTEVEDRA" ~ "35",
+                            region =="SALAMANCA" ~ "36",
+                            region =="SEGOVIA" ~ "38",
+                            region =="SEVILLA" ~ "39",
+                            region =="SORIA" ~ "40",
+                            region =="TARRAGONA" ~ "41",
+                            region =="TERUEL" ~ "42",
+                            region =="TOLEDO" ~ "43",
+                            region =="VALENCIA" ~ "44",
+                            region =="VALLADOLID" ~ "45",
+                            region =="ZAMORA" ~ "47",
+                            region =="ZARAGOZA" ~ "48",
+    
+  ))
+
+# A continuación eliminamos Ceuta, Melilla e Islas Canarias
+data_2019 <- subset(data_2019, region != is.na(region))
+#Guardamos nuestro dataset resultante
+write_csv(data_2019, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_mkd/data_2019.csv")
+
+##2020
+data_2020 <- data_2020 %>%
+  mutate(region = case_when(region =="A CORUNA" ~ "15",
+                            region =="ALBACETE" ~ "2",
+                            region =="ALICANTE" ~ "3",
+                            region =="ALMERIA" ~ "4",
+                            region =="ARABA" ~ "1",
+                            region =="ASTURIAS" ~ "33",
+                            region =="AVILA" ~ "5",
+                            region =="BADAJOZ" ~ "6",
+                            region =="ILLES BALEARS" ~ "7",
+                            region =="BARCELONA" ~ "8",
+                            region =="BIZKAIA" ~ "46",
+                            region =="BURGOS" ~ "9",
+                            region =="CACERES" ~ "10",
+                            region =="CADIZ" ~ "11",
+                            region =="CANTABRIA" ~ "37",
+                            region =="CASTELLON" ~ "12",
+                            region =="CIUDAD REAL" ~ "13",
+                            region =="CORDOBA" ~ "14",
+                            region =="CUENCA" ~ "16",
+                            region =="GIPUZKOA" ~ "20",
+                            region =="GIRONA" ~ "17",
+                            region =="GRANADA" ~ "18",
+                            region =="GUADALAJARA" ~ "19",
+                            region =="HUELVA" ~ "21",
+                            region =="HUESCA" ~ "22",
+                            region =="JAEN" ~ "23",
+                            region =="LA RIOJA" ~ "26",
+                            region =="LEON" ~ "24",
+                            region =="LLEIDA" ~ "25",
+                            region =="LUGO" ~ "27",
+                            region =="MADRID" ~ "28",
+                            region =="MALAGA" ~ "29",
+                            region =="MURCIA" ~ "30",
+                            region =="NAVARRA" ~ "31",
+                            region =="OURENSE" ~ "32",
+                            region =="PALENCIA" ~ "34",
+                            region =="PONTEVEDRA" ~ "35",
+                            region =="SALAMANCA" ~ "36",
+                            region =="SEGOVIA" ~ "38",
+                            region =="SEVILLA" ~ "39",
+                            region =="SORIA" ~ "40",
+                            region =="TARRAGONA" ~ "41",
+                            region =="TERUEL" ~ "42",
+                            region =="TOLEDO" ~ "43",
+                            region =="VALENCIA" ~ "44",
+                            region =="VALLADOLID" ~ "45",
+                            region =="ZAMORA" ~ "47",
+                            region =="ZARAGOZA" ~ "48",
+    
+  ))
+# Eliminamos Ceuta, Melilla e Islas Canarias
+data_2020 <- subset(data_2020, region != is.na(region))
+#Guardamos nuestro dataset resultante
+write_csv(data_2020, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_mkd/data_2020.csv")
+
+
+##2021
+data_2021 <- data_2021 %>%
+  mutate(region = case_when(region =="A CORUNA" ~ "15",
+                            region =="ALBACETE" ~ "2",
+                            region =="ALICANTE" ~ "3",
+                            region =="ALMERIA" ~ "4",
+                            region =="ARABA" ~ "1",
+                            region =="ASTURIAS" ~ "33",
+                            region =="AVILA" ~ "5",
+                            region =="BADAJOZ" ~ "6",
+                            region =="ILLES BALEARS" ~ "7",
+                            region =="BARCELONA" ~ "8",
+                            region =="BIZKAIA" ~ "46",
+                            region =="BURGOS" ~ "9",
+                            region =="CACERES" ~ "10",
+                            region =="CADIZ" ~ "11",
+                            region =="CANTABRIA" ~ "37",
+                            region =="CASTELLON" ~ "12",
+                            region =="CIUDAD REAL" ~ "13",
+                            region =="CORDOBA" ~ "14",
+                            region =="CUENCA" ~ "16",
+                            region =="GIPUZKOA" ~ "20",
+                            region =="GIRONA" ~ "17",
+                            region =="GRANADA" ~ "18",
+                            region =="GUADALAJARA" ~ "19",
+                            region =="HUELVA" ~ "21",
+                            region =="HUESCA" ~ "22",
+                            region =="JAEN" ~ "23",
+                            region =="LA RIOJA" ~ "26",
+                            region =="LEON" ~ "24",
+                            region =="LLEIDA" ~ "25",
+                            region =="LUGO" ~ "27",
+                            region =="MADRID" ~ "28",
+                            region =="MALAGA" ~ "29",
+                            region =="MURCIA" ~ "30",
+                            region =="NAVARRA" ~ "31",
+                            region =="OURENSE" ~ "32",
+                            region =="PALENCIA" ~ "34",
+                            region =="PONTEVEDRA" ~ "35",
+                            region =="SALAMANCA" ~ "36",
+                            region =="SEGOVIA" ~ "38",
+                            region =="SEVILLA" ~ "39",
+                            region =="SORIA" ~ "40",
+                            region =="TARRAGONA" ~ "41",
+                            region =="TERUEL" ~ "42",
+                            region =="TOLEDO" ~ "43",
+                            region =="VALENCIA" ~ "44",
+                            region =="VALLADOLID" ~ "45",
+                            region =="ZAMORA" ~ "47",
+                            region =="ZARAGOZA" ~ "48",
+    
+  ))
+
+# Eliminamos Ceuta, Melilla e Islas Canarias
+data_2021 <- subset(data_2021, region != is.na(region))
+#Guardamos nuestro dataset resultante
+write_csv(data_2021, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_mkd/data_2021.csv")
+
+```
+
+Hasta ahora hemos trabajado con formato *wide* en nuestros datasets pero será necesario disponer de los mismos dataset en formato *long*. Por tanto, nuestro tercer paso será convertir estos a formato *long*. Seguidamente, convertimos la variable **mes** a formato *fecha*.
+
+```{r, label = long}
+#Convertimos a formato long
+data_2019_long <- data_2019 %>%
+ pivot_longer(cols = c(2:13),
+              names_to = "mes", 
+              values_to = "precipitaciones" )
+
+data_2019_long <- data_2019_long %>% 
+  mutate(mes = as.Date(mes, format = "%d/%m/%Y"))
+
+write_csv(data_2019_long, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_mkd/data_2019_long.csv")
+
+data_2020_long <- data_2020 %>%
+ pivot_longer(cols = c(2:13),
+              names_to = "mes", 
+              values_to = "precipitaciones" )
+
+data_2020_long <- data_2020_long %>% 
+  mutate(mes = as.Date(mes, format = "%d/%m/%Y"))
+
+write_csv(data_2020_long, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_mkd/data_2020_long.csv")
+
+data_2021_long <- data_2021 %>%
+ pivot_longer(cols = c(2:13),
+              names_to = "mes", 
+              values_to = "precipitaciones" )
+
+data_2021_long <- data_2021_long %>% 
+  mutate(mes = as.Date(mes, format = "%d/%m/%Y"))
+
+write_csv(data_2021_long, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_mkd/data_2021_long.csv")
+```
+
+### 2.2.2. Datos espaciales del CNIG
+
+En su página web, el Centro Nacional de Información Geográfica (CNIG) de España proporciona los datos topográficos básicos necesarios para la representación del territorio. En este caso será necesario descargar los mapas correspondientes a los límites municipales, provinciales y autonómicos en formato shape (.shp).
+
+Los podréis descargar desde la siguiente dirección: https://centrodedescargas.cnig.es/CentroDescargas/catalogo.do?Serie=CAANE, aunque os dejo el archivo necesario ya subido a Kaggle junto con los datos a los que hace referencia este documento.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
