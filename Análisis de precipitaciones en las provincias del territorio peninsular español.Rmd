@@ -1,23 +1,28 @@
 ---
-title: "Análisis de precipitaciones en las provincias del territorio peninsular español."
+title: "Análisis de precipitaciones en las provincias del territorio peninsular español I."
 author: "Josep Blasco Domínguez"
-date: "2023-04-08"
+date: "2023-03-16"
 output: 
   html_document: 
     toc: yes
 ---
 
 # 1. Planteamiento inicial.
-En esta ocasión trabajaré en un análisis de las precipitaciones en las provincias del territorio peninsular español para los años 2019, 2020 y 2021. 
+Para poner en práctica análisis con R, no existe mejor forma que realizar deiferentes análisis de diversas tipologías con la herramienta. Por ello, el objetivo de este análisis será practicar los procesos de extracción de datos desde una fuente *Open Data*, la adequación de los mismos para realizar fusiones de distintos datos, representaciones, cálculo de estadísticos y conclusiones relevantes
+
+En esta ocasión trabajaré en un análisis de las precipitaciones en las provincias del territorio peninsular español para los años 2019, 2020 y 2021. Pondré en práctica diferentes formas de analizar los datos y visualizaciones de los mismos. Dividiré el análisis de las precipitaciones en dos R Markdown: este mismo, dedicado a la extracción de los datos, su adequación y análisis de exploratorio de las precipitaciones anuales; y una segunda con análisis exploratorio de las precipitaciones teniendo en cuenta las observaaciones mensuales.
 
 ## 1.1. Librerias
 ```{r, label = librerias, message=FALSE }
 library(readr) #Leer datos
+library(knitr) #Tablas 
 library(tidyverse) #Preparar datos
 library(sf) #Trabajar con datos espaciales
 library(stars) #Trabajar con datos espaciales
 library(terra) #Trabajar con datos espaciales
-
+library(cowplot) #Agrupar plots
+library(ggthemes) #Temas para representaciones
+library(paletteer) #Paletas de colores para representaciones
 ```
 
 # 2. Datos.
@@ -26,21 +31,23 @@ Los datos que emplearé pertenecen a la Agencia Estatal de Meteorología (AEMET)
 
 Al tratarse de *Open Data* se encuentran disponibles en: https://www.aemet.es/es/datos_abiertos/estadisticas/balance_hidrico
 
+Por otra parte, los datos de mapeo tambien son *Open Data*. En su página web, el Centro Nacional de Información Geográfica (CNIG) de España proporciona los datos topográficos básicos necesarios para la representación del territorio. En este caso será necesario descargar los mapas correspondientes a los límites municipales, provinciales y autonómicos en formato shape (.shp). Aunque tan solo serán necesarias las distribuciones autonómicas, ya adjuntas a este dataset, podemos descargar estas y muchas otras en:
+https://centrodedescargas.cnig.es/CentroDescargas/catalogo.do?Serie=CAANE
+
 ## 2.2. Estructuración y preparaación de los datos
 ### 2.2.1. Los datos de AEMET
 Emplearemos los datasets referentes a las **precipitaciones** por **provincias**, dejando, por el momento, el resto de datasets y variables.
 
 Por ello, adjunto los dataset iniciales 
 
-- PREC_1981_2010_Provincias. Media mensual de los años 1981-2010 (datos base como referencia de precipitaciones normales)
-- PREC_2019_Provincias. Media mensual del año 2019.
-- PREC_2020_Provincias. Media mensual del año 2020.
-- PREC_2021_Provincias. Media mensual del año 2021.
+- *PREC_1981_2010_Provincias*. Media mensual de los años 1981-2010 (datos base como referencia de precipitaciones normales)
+- *PREC_2019_Provincias*. Media mensual del año 2019.
+- *PREC_2020_Provincias*. Media mensual del año 2020.
+- *PREC_2021_Provincias*. Media mensual del año 2021.
 
 
 ```{r label = importar_data, message=FALSE}
 #Importamos data
-
 PREC_1981_2010_Provincias <- read_delim("PREC_1981_2010_Provincias.csv", 
     delim = ";", escape_double = FALSE, trim_ws = TRUE)
 PREC_2019_Provincias <- read_delim("PREC_2019_Provincias.csv", 
@@ -50,7 +57,7 @@ PREC_2020_Provincias <- read_delim("PREC_2020_Provincias.csv",
 PREC_2021_Provincias <- read_delim("PREC_2021_Provincias.csv", 
     delim = ";", escape_double = FALSE, trim_ws = TRUE)
 ```
-Las tuplas de estos dataset resultan de la observación mensual de precipitaciones en las provincias del territorio español. Se incluyen en los datasets Ceuta, Melilla y las Islas Canarias. Por su parte, las precipitaciones se miden como la precipitación acuosa acumulada media mensualenen en mm. 
+Las tuplas de estos dataset resultan de la observación mensual de precipitaciones en las provincias del territorio español. Se incluyen en los datasets Ceuta, Melilla y las Islas Canarias. Por su parte, las precipitaciones se miden como la precipitación acuosa acumulada media mensualenente en mm. Recordemos que 1 mm de agua equivale a 1 L por m2.
 
 A continuación empezamos a modificar estos dataset para su posterior análisis. Primero, vamos a establecer fechas en aquellas variables (columnas) que aparecen con el mes del año.
 
@@ -64,6 +71,24 @@ data_2020 <- as.data.frame(PREC_2020_Provincias)
 data_2021 <- as.data.frame(PREC_2021_Provincias)
 
 #Establecemos fechas y nos quedamos con las variables relevantes para los datasets anuales.
+
+##base_referencia
+data_base$"15/01/2010" <- data_base$enero
+data_base$"15/02/2010" <- data_base$febrero
+data_base$"15/03/2010" <- data_base$marzo
+data_base$"15/04/2010" <- data_base$abril
+data_base$"15/05/2010" <- data_base$mayo
+data_base$"15/06/2010" <- data_base$junio
+data_base$"15/07/2010" <- data_base$julio
+data_base$"15/08/2010" <- data_base$agosto
+data_base$"15/09/2010" <- data_base$septiembre
+data_base$"15/10/2010" <- data_base$octubre
+data_base$"15/11/2010" <- data_base$noviembre
+data_base$"15/12/2010" <- data_base$diciembre
+
+data_base <- select(data_base,"region","15/01/2010", "15/02/2010","15/03/2010","15/04/2010","15/05/2010",
+                    "15/06/2010","15/07/2010","15/08/2010","15/09/2010","15/10/2010","15/11/2010",
+                    "15/12/2010" )
 
 ##2019
 data_2019$"15/01/2019" <- data_2019$enero
@@ -120,9 +145,12 @@ data_2021 <- select(data_2021,"region","15/01/2021", "15/02/2021","15/03/2021","
 Como segundo paso voy a incorporar una variable **id** a los dataset. Esta variable la he definido a partir de un orden particular, para posteriormente poder mapear los datos mediante un archivo *shape (.shp)*. Por tanto, recomiendo seguir rigurosamente el próximo paso y obtener la cohesión que he establecido para estos datasets.
 
 Aplicamos por tanto:
+
 1. Asignar códigos id a las provincias.
+
 2. Eliminar los nuevos NA que aparecen correspondientes a *Ceuta, Melilla e Islas Canarias (Las Palmas y Santa Cruz de Tenerife)*.
-3. Guardamos nuestro archivo
+
+3. Guardamos nuestro archivo.
 
 ```{r, label = id}
 #Primero, cambiamos la variable region por su correspondiente id
@@ -364,7 +392,21 @@ write_csv(data_2021, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_m
 Hasta ahora hemos trabajado con formato *wide* en nuestros datasets pero será necesario disponer de los mismos dataset en formato *long*. Por tanto, nuestro tercer paso será convertir estos a formato *long*. Seguidamente, convertimos la variable **mes** a formato *fecha*.
 
 ```{r, label = long}
-#Convertimos a formato long
+#Convertimos a formato long y formato fecha para nuestra variable mensual
+
+#base_referencia
+data_base_long <- data_base %>%
+ pivot_longer(cols = c(2:13),
+              names_to = "mes", 
+              values_to = "precipitaciones" )
+
+data_base_long <- data_base_long %>% 
+  mutate(mes = as.Date(mes, format = "%d/%m/%Y"))
+
+write_csv(data_base_long, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_mkd/data_base_long.csv")
+
+
+#2019
 data_2019_long <- data_2019 %>%
  pivot_longer(cols = c(2:13),
               names_to = "mes", 
@@ -375,6 +417,7 @@ data_2019_long <- data_2019_long %>%
 
 write_csv(data_2019_long, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_mkd/data_2019_long.csv")
 
+#2020
 data_2020_long <- data_2020 %>%
  pivot_longer(cols = c(2:13),
               names_to = "mes", 
@@ -385,6 +428,7 @@ data_2020_long <- data_2020_long %>%
 
 write_csv(data_2020_long, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/data_mkd/data_2020_long.csv")
 
+#2021
 data_2021_long <- data_2021 %>%
  pivot_longer(cols = c(2:13),
               names_to = "mes", 
@@ -402,21 +446,619 @@ En su página web, el Centro Nacional de Información Geográfica (CNIG) de Espa
 
 Los podréis descargar desde la siguiente dirección: https://centrodedescargas.cnig.es/CentroDescargas/catalogo.do?Serie=CAANE, aunque os dejo el archivo necesario ya subido a Kaggle junto con los datos a los que hace referencia este documento.
 
+Una vez descargados estos datos procedemos a importarlos a R. Dado que es importante especificar el argumento referente a la capa que precisamos del archivo .shp, primero identificaremos las capas existentes en el archivo.
+```{r, label = capa}
+#Conocer la capa que queremos leer para la posterior manipulación de los datos
+
+capas <- st_layers("/Users/josepblascodominguez/Desktop/R/Balance_hidro/lineas_limite/SHP_ETRS89/recintos_provinciales_inspire_peninbal_etrs89/recintos_provinciales_inspire_peninbal_etrs89.shp")
+capas
+```
+```{r, label = mapa_inicial}
+#Importamos los datos
+datos_mapa <- st_read(
+  "/Users/josepblascodominguez/Desktop/R/Balance_hidro/lineas_limite/SHP_ETRS89/recintos_provinciales_inspire_peninbal_etrs89/recintos_provinciales_inspire_peninbal_etrs89.shp", layer ="recintos_provinciales_inspire_peninbal_etrs89")
+
+```
+A continuación, nos quedaremos con la variable provincias y sus geometrías, además incorporaremos nuestro *id* por provincias. También eliminaremos aquellas provincias que no vamos a estudiar.
+
+```{r, label = ajustes_mapa}
+#Selección de variables
+datos_mapa <- select(datos_mapa,
+                     "NAMEUNIT",
+                     "geometry")
+#Eliminamos provincias
+datos_mapa <- subset(datos_mapa, !(NAMEUNIT %in% c("Ceuta", "Melilla", "Territorio no asociado a ninguna provincia")))
+#Asignamos id
+datos_mapa$id <- c(1:48)
+```
+Ahora ya disponemos de nuestro mapa y podemos representarlo de forma simple con la siguiente sintaxis. En proximos pasos representaremos nuestros datos de precipitaciones en el mapa.
+```{r,label = representar_mapa}
+#Representación
+ggplot(datos_mapa)+ #Utilizamos ggplot
+  geom_sf()+ #Función específica de representación de archivos .shp
+  coord_sf(datum = NA)+ #Eliminamos coordenadas, grados y guiones
+   theme(panel.background = element_blank()) #Eliminamos el fondo
+```
+
+### 2.2.3. Precipitaciones Anuales Totales y preparación para la georepresentación.
+
+En este paso vamos a calcular las precipitaciones totales del año '20xx' para obtener una fotografía anual de las precipitaciones acumuladas en el territorio peninsular. Seguidamente, para poder representar los datos, incorporaremos los datos geoespaciales del archivo .shp a nuestros datos de precipitaciones. 
+Para ello utilizaremos el *id* que preparamos anteriormente. 
+
+```{r, label = anuales}
+#Hecemos 'join' para aquellos los dataset en formato long que creamos y los datos espaciales.
+# base 1981-2010
+
+#Nuevos dataset calculando el total de precipitaciones anual
+data_base_long$id <- as.factor(data_base_long$region)
+
+anual_base <- data_base_long%>%
+  group_by(id) %>% 
+  summarise(total_base = sum(precipitaciones))
+
+# A continuación, unimos los datasets
+datos_mapa$id <- as.factor(datos_mapa$id)
+anual_base_m <- right_join(anual_base, datos_mapa, by = "id")
+
+#Para poder representarlo como archivo shapefile debemos convertirlo a este
+anual_base_m <- st_as_sf(anual_base_m)
+
+write_sf(anual_base_m, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/mapa/anual_base_m.shp")
+
+# Año 2019
+#Nuevos dataset calculando el total de precipitaciones anual
+data_2019_long$id <- as.factor(data_2019_long$region)
+
+anual_2019 <- data_2019_long%>%
+  group_by(id) %>% 
+  summarise(total_2019 = sum(precipitaciones))
+
+# A continuación, unimos los datasets
+datos_mapa$id <- as.factor(datos_mapa$id)
+anual_2019_m <- right_join(anual_2019, datos_mapa, by = "id")
+
+#Para poder representarlo como archivo shapefile debemos convertirlo a este
+anual_2019_m <- st_as_sf(anual_2019_m)
+
+write_sf(anual_2019_m, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/mapa/anual_2019_m.shp")
+
+# Año 2020
+#Nuevos dataset calculando el total de precipitaciones anual
+data_2020_long$id <- as.factor(data_2020_long$region)
+
+anual_2020 <- data_2020_long%>%
+  group_by(id) %>% 
+  summarise(total_2020 = sum(precipitaciones))
+
+# A continuación, unimos los datasets
+datos_mapa$id <- as.factor(datos_mapa$id)
+anual_2020_m <- right_join(anual_2020, datos_mapa, by = "id")
+
+#Para poder representarlo como archivo shapefile debemos convertirlo a este
+anual_2020_m <- st_as_sf(anual_2020_m)
+
+write_sf(anual_2020_m, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/mapa/anual_2020_m.shp")
+
+# Año 2021
+#Nuevos dataset calculando el total de precipitaciones anual
+data_2021_long$id <- as.factor(data_2021_long$region)
+
+anual_2021 <- data_2021_long%>%
+  group_by(id) %>% 
+  summarise(total_2021 = sum(precipitaciones))
+
+# A continuación, unimos los datasets
+datos_mapa$id <- as.factor(datos_mapa$id)
+anual_2021_m <- right_join(anual_2021, datos_mapa, by = "id")
+
+#Para poder representarlo como archivo shapefile debemos convertirlo a este
+anual_2021_m <- st_as_sf(anual_2021_m)
+
+write_sf(anual_2021_m, "/Users/josepblascodominguez/Desktop/R/Balance_hidro/mapa/anual_2021_m.shp")
+```
+
+# 3. Análisis exploratorio de las precipitaciones
+
+En este apartado vamos a explorar los datos que tenemos para el período de referencia y los tres años de datos que disponemos. Dividiremos el apartado en análisis de precipitaciones anuales totales y precipitaciones mensuales.
+
+***Recordemos que el apartado de precipitaciones mensuales se encuentra en el notebook número 2 de este mismo análisis***
+
+## 3.1. Precipitaciones anuales
+
+Representamos las precipitaciones anuales de referencia y de nuestros años correspondientes. Además calcularemos algunos estadísticos para conocer mejor la distribución de precipitaciones en el territorio peninsular.
+
+### 3.1.1 Promedio de los años de referencia (1981-2010)
+```{r, label = m_base}
+mapa_referencia <- ggplot(anual_base_m, aes(fill = total_base ))+ 
+  geom_sf()+
+  scale_fill_gradientn(colours = RColorBrewer::brewer.pal(9, "Blues"), 
+                      name = "Precipitaciones (mm)", 
+                      limits = c(230,1800)) +
+  labs(title = "Precipitaciones anuales de referencia por provincia",
+       subtitle = "Promedio de precipitaciones para el período de referencia: 1981-2010", 
+       fill = "Precipitaciones",
+       caption = "Fuente: AEMET")+
+  coord_sf(datum = NA)+
+   theme(panel.background = element_blank(),
+         plot.title = element_text(size = 14, hjust = 0),
+         plot.subtitle = element_text(color = "grey40",size = 10, hjust = 0),
+    legend.title = element_text(color = "grey40", size = 7),
+    legend.text = element_text(color = "grey40", size = 8, hjust = 0),
+    plot.caption = element_text(color = "grey40", size = 8, hjust = 1),
+         plot.margin = unit(c(0.5,2,0.5,1), "cm"))
+
+plot(mapa_referencia)
+```
+```{r, label = estad_base}
+#Podemos averiguar los principales estadísticos de la variable ejecutando: 
+summary(anual_base_m$total_base)
+sd(anual_base_m$total_base)
+var(anual_base_m$total_base)
+range(anual_base_m$total_base)
+
+#Calculamos los valores máximo y mínimo. Los asociamos a su provincia.
+max_valor <- max(anual_base_m$total_base)
+max_provincia <- anual_base_m$NAMEUNIT[which.max(anual_base_m$total_base)]
+cat("El valor máximo es", max_valor, "mm para la provincia de", max_provincia, "\n")
+
+
+min_valor <- min(anual_base_m$total_base)
+min_provincia <- anual_base_m$NAMEUNIT[which.min(anual_base_m$total_base)]
+cat("El valor mínimo es", min_valor, "mm para la provincia de", min_provincia, "\n")
+```
 
 
 
 
+### 3.1.2 Precipitaciones acumuladas año 2019.
+
+```{r, label = m_2019}
+mapa_2019 <- ggplot(anual_2019_m, aes(fill = total_2019 ))+ 
+  geom_sf()+
+  scale_fill_gradientn(colours = RColorBrewer::brewer.pal(9, "Blues"), 
+                      name = "Precipitaciones (mm)", 
+                      limits = c(230,1800)) +
+  labs(title = "Precipitaciones acumuladas por provincia en 2019 ", 
+       fill = "Precipitaciones",
+       caption = "Fuente: AEMET")+
+  coord_sf(datum = NA)+
+   theme(panel.background = element_blank(),
+         plot.title = element_text(size = 14, hjust = 0),
+         plot.subtitle = element_text(color = "grey40",size = 10, hjust = 0),
+    legend.title = element_text(color = "grey40", size = 7),
+    legend.text = element_text(color = "grey40", size = 8, hjust = 0),
+    plot.caption = element_text(color = "grey40", size = 8, hjust = 1),
+         plot.margin = unit(c(0.5,2,0.5,1), "cm"))
+
+plot(mapa_2019)
+```
 
 
+```{r, label = estad_2019 }
+#Estadísticos 2019
+summary(anual_2019_m$total_2019)
+sd(anual_2019_m$total_2019)
+var(anual_2019_m$total_2019)
+range(anual_2019_m$total_2019)
+
+#Calculamos los valores máximo y mínimo. Los asociamos a su provincia.
+max_valor <- max(anual_2019_m$total_2019)
+max_provincia <- anual_2019_m$NAMEUNIT[which.max(anual_2019_m$total_2019)]
+cat("El valor máximo es", max_valor, "mm para la provincia de", max_provincia, "\n")
 
 
+min_valor <- min(anual_2019_m$total_2019)
+min_provincia <- anual_2019_m$NAMEUNIT[which.min(anual_2019_m$total_2019)]
+cat("El valor mínimo es", min_valor, "mm para la provincia de", min_provincia, "\n")
+
+```
+
+### 3.1.3 Precipitaciones acumuladas año 2020.
+
+```{r, label = m_2020}
+mapa_2020 <- ggplot(anual_2020_m, aes(fill = total_2020 ))+ 
+  geom_sf()+
+  scale_fill_gradientn(colours = RColorBrewer::brewer.pal(9, "Blues"), 
+                      name = "Precipitaciones (mm)", 
+                      limits = c(230,1800)) +
+  labs(title = "Precipitaciones acumuladas en por provincia en 2020", 
+       fill = "Precipitaciones",
+       caption = "Fuente: AEMET")+
+  coord_sf(datum = NA)+
+   theme(panel.background = element_blank(),
+         plot.title = element_text(size = 14, hjust = 0),
+         plot.subtitle = element_text(color = "grey40",size = 10, hjust = 0),
+    legend.title = element_text(color = "grey40", size = 7),
+    legend.text = element_text(color = "grey40", size = 8, hjust = 0),
+    plot.caption = element_text(color = "grey40", size = 8, hjust = 1),
+         plot.margin = unit(c(0.5,2,0.5,1), "cm"))
+
+plot(mapa_2020)
+```
 
 
+```{r, label = estad_2020 }
+#Estadísticos 2020 
+summary(anual_2020_m$total_2020)
+sd(anual_2020_m$total_2020)
+var(anual_2020_m$total_2020)
+range(anual_2020_m$total_2020)
+
+#Calculamos los valores máximo y mínimo. Los asociamos a su provincia.
+max_valor <- max(anual_2020_m$total_2020)
+max_provincia <- anual_2020_m$NAMEUNIT[which.max(anual_2020_m$total_2020)]
+cat("El valor máximo es", max_valor, "mm para la provincia de", max_provincia, "\n")
 
 
+min_valor <- min(anual_2020_m$total_2020)
+min_provincia <- anual_2020_m$NAMEUNIT[which.min(anual_2020_m$total_2020)]
+cat("El valor mínimo es", min_valor, "mm para la provincia de", min_provincia, "\n")
+```
+
+### 3.1.4 Precipitaciones acumuladas año 2021.
+
+```{r, label = m_2021}
+mapa_2021 <- ggplot(anual_2021_m, aes(fill = total_2021 ))+ 
+  geom_sf()+
+  scale_fill_gradientn(colours = RColorBrewer::brewer.pal(9, "Blues"), 
+                      name = "Precipitaciones (mm)", 
+                      limits = c(230,1800)) +
+  labs(title = "Precipitaciones acumuladas por provincia en 2021", 
+       fill = "Precipitaciones",
+       caption = "Fuente: AEMET")+
+  coord_sf(datum = NA)+
+   theme(panel.background = element_blank(),
+         plot.title = element_text(size = 14, hjust = 0),
+         plot.subtitle = element_text(color = "grey40",size = 10, hjust = 0),
+    legend.title = element_text(color = "grey40", size = 7),
+    legend.text = element_text(color = "grey40", size = 8, hjust = 0),
+    plot.caption = element_text(color = "grey40", size = 8, hjust = 1),
+         plot.margin = unit(c(0.5,2,0.5,1), "cm"))
+
+plot(mapa_2021)
+```
 
 
+```{r, label = tabla_2021 }
+#Estadísticos 2021
+summary(anual_2021_m$total_2021)
+sd(anual_2021_m$total_2021)
+var(anual_2021_m$total_2021)
+range(anual_2021_m$total_2021)
+
+#Calculamos los valores máximo y mínimo. Los asociamos a su provincia.
+max_valor <- max(anual_2021_m$total_2021)
+max_provincia <- anual_2021_m$NAMEUNIT[which.max(anual_2021_m$total_2021)]
+cat("El valor máximo es", max_valor, "mm para la provincia de", max_provincia, "\n")
 
 
+min_valor <- min(anual_2021_m$total_2021)
+min_provincia <- anual_2021_m$NAMEUNIT[which.min(anual_2021_m$total_2021)]
+cat("El valor mínimo es", min_valor, "mm para la provincia de", min_provincia, "\n")
+```
+### 3.1.4 Tabla resumen y primeras conclusiones
+
+En este apartado formaremos una tabla resumen de los principales estadísticos agrupados por año. Además, emplearemos código para identificar a que provincias estan asociados los valores máximo y mínimo de cada año, y posteriormente imprimir el resultado en el documento. Dejo visible el código empleado.
+
+```{r}
+#Tabla que resuma los estadísticos de cada período
+
+##Summary de los diferentes años
+resumen_base <- round(summary(anual_base_m$total_base),2)
+resumen_2019 <- round(summary(anual_2019_m$total_2019),2)
+resumen_2020 <- round(summary(anual_2020_m$total_2020),2)
+resumen_2021 <- round(summary(anual_2021_m$total_2021),2)
+
+##Desviación típica de los diferentes años
+sd_base <- round(sd(anual_base_m$total_base),2)
+sd_2019 <- round(sd(anual_2019_m$total_2019),2)
+sd_2020 <- round(sd(anual_2020_m$total_2020),2)
+sd_2021 <- round(sd(anual_2021_m$total_2021),2)
+
+##Rango de los diferentes años
+rango_base <- diff(range(anual_base_m$total_base))
+rango_2019 <- diff(range(anual_2019_m$total_2019))
+rango_2020 <- diff(range(anual_2020_m$total_2020))
+rango_2021 <- diff(range(anual_2021_m$total_2021))
+
+#Formamos la tabla resuemn
+tabla_resumen1 <-  t(do.call(rbind, list(resumen_base, 
+                                      resumen_2019, 
+                                      resumen_2020, 
+                                      resumen_2021)))
+
+tabla_resumen2 <- rbind(tabla_resumen1,
+                        c(sd_base,
+                          sd_2019, 
+                          sd_2020, 
+                          sd_2021),
+                        c(rango_base,
+                          rango_2019,
+                          rango_2020,
+                          rango_2021))
+
+colnames(tabla_resumen2) <-  c("Años 1981-2010", "Año 2019", "Año 2020", "Año 2021")
+row.names(tabla_resumen2) <-  c("Mínimo", "1r Q", "Mediana", "Media", "3r Q", "Máximo", "Desviación estándar", "Rango")
+
+kable(tabla_resumen2)
+
+#Añadimos las provincias a las que pertenecen los valores mínimo y máximo
+
+max_base <- max(anual_base_m$total_base)
+max_base_provincia <- anual_base_m$NAMEUNIT[which.max(anual_base_m$total_base)]
+
+max_2019 <- max(anual_2019_m$total_2019)
+max_2019_provincia <- anual_2019_m$NAMEUNIT[which.max(anual_2019_m$total_2019)]
+
+max_2020 <- max(anual_2020_m$total_2020)
+max_2020_provincia <- anual_2020_m$NAMEUNIT[which.max(anual_2020_m$total_2020)]
+
+max_2021 <- max(anual_2021_m$total_2021)
+max_2021_provincia <- anual_2021_m$NAMEUNIT[which.max(anual_2021_m$total_2021)]
+
+cat("El valor máximo para el período de referencia 1981-2010 es", max_base, "mm para la provincia de", max_base_provincia, "\n")
+cat("El valor máximo para el año 2019 es", max_2019, "mm de agua para la provincia de", max_2019_provincia, "\n")
+cat("El valor máximo para el año 2020 es", max_2020, "mm de agua para la provincia de", max_2020_provincia, "\n")
+cat("El valor máximo para el año 2021 es", max_2021, "mm de agua para la provincia de", max_2021_provincia, "\n")
+
+
+min_base <- min(anual_base_m$total_base)
+min_base_provincia <- anual_base_m$NAMEUNIT[which.min(anual_base_m$total_base)]
+
+min_2019 <- min(anual_2019_m$total_2019)
+min_2019_provincia <- anual_2019_m$NAMEUNIT[which.min(anual_2019_m$total_2019)]
+
+min_2020 <- min(anual_2020_m$total_2020)
+min_2020_provincia <- anual_2020_m$NAMEUNIT[which.min(anual_2020_m$total_2020)]
+
+min_2021 <- min(anual_2021_m$total_2021)
+min_2021_provincia <- anual_2021_m$NAMEUNIT[which.min(anual_2021_m$total_2021)]
+
+cat("El valor mínimo para el período de referencia 1981-2010 es", min_base, "mm para la provincia de", min_base_provincia, "\n")
+cat("El valor mínimo para el año 2019 es", min_2019, "mm de agua para la provincia de", min_2019_provincia, "\n")
+cat("El valor mínimo para el año 2020 es", min_2020, "mm de agua para la provincia de", min_2020_provincia, "\n")
+cat("El valor mínimo para el año 2021 es", min_2021, "mm de agua para la provincia de", min_2021_provincia, "\n")
+```
+**Conclusiones**: Tras calcular nuestros estadísticos sabemos que las diferencias de precipitaciones entre años son, o pueden ser, normales. No existen anomalías visibles tras el cálculo de estas medidas. Además, también conocemos que tanto en el periodo de referencia, que recordemos que es el promedio de los años 1981-2010, como en los siguientes años analizados por separado, los valores mínimos corresponden a Almería y los máximos a Pontevedra. Esto no ha cambiado en los años estudiados y lo atribuímos a la geografía peninsular española y posicionamiento en el territorio. Almería no recibe prácticamente borrascas que dejen precipitaciones a lo largo del año, muchas veces estas suelen venir torencialmente del Mar Mediterráneo con los meses de septiembre-marzo, pero descargan en el este, nordeste de la provincia. Por su parte, Pontevedra es la provincia que más al oeste está de todo el territorio peninsular español. Esta provincia, así como el norte español, recibe cuantiosas brorrascas provenintes del Oceano Atlántico. En su caso, además, poseen una geografía que propicia la descarga de borrascas en las zonas litorales, pues las altas cadenas montañosas suelen bloquear el paso de muchas nubes hacia el interior de la penínusla y acaban precipitando en el litoral norte. 
+
+Podríamos destacar algunas detecciones:
+
+- Los tres años estudiados poseen con un mínimo menor al del año de referencia.
+
+- En el año 2021, el tercer cuartil se situa más bajo que el resto de los años analizados.
+
+- El año 2021 es el año analizado con menos precipitaciones.
+
+- La media siempre se situa por encima de la mediana, 2do cuartil, los valores más altos hacen que sea superior. No obstante, predominan los valores bajos.
+
+Para ilustrar un poco más esta comparación de distribuciones,vamos a representar un *box-plot* de cada año, y con objetivo de hacer estos box-plot más comparables los representaremos juntos en un mismo plot. Aplicaremos un color más oscuro al período de referencia, los años estudiados con un color más claro.
+
+```{r, label = boxplot}
+#Este plot es una combinación de tres box-plot de la variable precipitaciones de los diferentes datasets.
+#La variable que queremos representar, precipitaciones, la ubicaremos en el eje Y. Pero para que los boxplot no se superpongan, deberemos establecer, en el eje X, un nombre que haga referencia al boxplot de Y. Por tanto, en el mapping = aes(x = "año"). De esta forma tenemos un un eje x que diferencia los plot y se representan separados.
+
+#Además podemos añadir el cálculo de la media a nuestros boxplot para identificar mejor donde se ubica en esta representción de la distribución de las precipitaciones.
+
+ggplot() +
+  geom_boxplot(data = anual_base_m, aes(x = "Promedio 1981-2010", y = total_base), fill = "#33608C") + #Boxplot referencia
+  geom_boxplot(data = anual_2019_m, aes(x = "Año 2019", y = total_2019), fill = "#8DBBDC") + #Boxplot Año 2019
+  geom_boxplot(data = anual_2020_m, aes(x = "Año 2020", y = total_2020), fill = "#8DBBDC") + # Boxplot Año 2020
+  geom_boxplot(data = anual_2021_m, aes(x = "Año 2021", y = total_2021), fill = "#8DBBDC") + #Boxplot Año 2021
+ stat_summary(data = anual_base_m, aes(x = "Promedio 1981-2010", y = total_base), fun = mean, geom = "point", size = 2, color = "#BE2641") +
+ stat_summary(data = anual_2019_m, aes(x = "Año 2019", y = total_2019), fun = mean, geom = "point",  size = 2, color = "#EC867E") +
+ stat_summary(data = anual_2020_m, aes(x = "Año 2020", y = total_2020), fun = mean, geom = "point", size = 2, color = "#EC867E") +
+ stat_summary(data = anual_2021_m, aes(x = "Año 2021", y = total_2021), fun = mean, geom = "point", size = 2, color = "#EC867E") +
+  scale_y_continuous(limits = c(0,1800), breaks = seq(0, 1800, 200))+
+   labs(title = "Precipitaciones del territorio peninsular por año", caption = "Fuente: AEMET",
+      x = NULL, 
+      y= "Precipitaciones (mm)") +
+  theme(panel.background = element_blank(),
+         plot.title = element_text(size = 14, hjust = 0),
+    plot.caption = element_text(color = "grey40", size = 7, hjust = 1),
+         plot.margin = unit(c(0.5,2,0.5,1), "cm"))
+```
+
+Tras representar los boxplot observamos que la mediana y la media de precipitaciones en el territorio peninsular sulen ser semejantes para los años estudiados, diferenciandose entorno a los 130 mm de agua. No observamos datos atípicos por debajo del 1er Cuartil, las pocas lluvias a lo largo del año es algo frecuente en la mayoría de las provincias del territorio. Por otro lado, si observamos datos atípicos por encima de 4º Cuartil. Aquellas provincias que superan los 1200 mm de precipitaciones suelen ser clasificadas como atípicas para nuestra distribución. La mayoría de las provincias no llegan a estas cantidades, y las provincias que sí lo hacen se clasifican como atípicas, fuera de nuestros box-plot.
+La media se situa siempre por encima de la mediana debido a estas provincias con lluvias atípicamente altas.
+
+Si analizamos más detalladamente los diferentes años respecto al período de referencia tenemos:
+
+- Para el año 2019 tenemos un desplazameinto de la caja hacia abajo respecto al período de referencia, lo que indica una concentración de provincias que han recibido menos lluvias. Existen puntos atípicos por encima de los 1200 mm, pertenecientes a las provincias del norte y noroeste del territorio.
+
+- Para el año 2020 obtenemos una distribución bastante similar al período de referencia solo que la amplitud de la caja es algo mayor, y por tanto los cuartiles 2º y 3º se ensanchan en este año. El bigote superior supera los 1200 mm de precipitaciones.
+
+- Para el año 2021 se observa una disminución de las precipitaciones general, las provincias se concentran entorno a los 400 mm y los 660 mm. Los valores atípicos surgen a partír de los 1000 mm.
+
+
+En colnclusión, las provincias con mayores precipitaciones son aquellas pertenecientes al **clima oceánico**, aquellas con menos precipitaciones pertenecen a un **clima semidesértico** y el resto de provincias tienen un **clima continental** o **mediterráneo** con lluvias moderadas.
+
+Tras analizar los datos de los que disponemos, podría ser interesante poner en práctica un álisis de los incrementos de precipitaciones en las provincias respecto al período base. Por ello, dedicaremos el siguiente apartado a calcular y analizar estos incrementos.
+
+### 3.1.5 Análisis del incremento de precipitaciones.
+
+Este aparatdo será dedicado a preparar los datasets con los incrementos de precipitaciones respecto a los años de referencia y los datos de georepresentación.
+
+ 
+A continuación calculamos los incrementos de precipitaciones por provincia de los años disponibles respecto al período de rerferencia.
+```{r, label = incrementos}
+#Seleccionamos en un archivo los datos geoespaciales, las precipitaciones de los años de referencia y las precipitaciones de 2019, 2020 y 2021
+
+#Dado que la función select no funciona con los archivos shapefile debemos realizar el siguiente procedimiento para crear nuestro dataset de incrementos
+
+incrementos <- full_join(anual_base_m, anual_2019, by = "id")
+incrementos <- full_join(incrementos, anual_2020, by = "id")
+incrementos <- full_join(incrementos, anual_2021, by = "id")
+
+#Ahora calculamos las tasas de variación de la siguiente manera ((Actual - Pbase)/Pbase)*100. Precipitaciones del año actual menos las precipitaciones del año base; dividido por las precipitaciones del año base; y multiplicado por 100 para obtener un porcentaje más interpretable.
+
+incrementos <- mutate(incrementos, TV_2019 = ((total_2019-total_base)/total_base)*100) %>%
+  mutate(incrementos, TV_2020 = ((total_2020-total_base)/total_base)*100) %>%
+  mutate(incrementos, TV_2021 = ((total_2021-total_base)/total_base)*100)
+
+#Limpiamos el dataset de aquellas variables que no serán necesarias en esta ocasión
+incrementos <- incrementos[c(1,3,4,8:10)]
+```
+
+En este siguiente paso representaremos geográficamente los incrementos de precipitaciones en el territorio peninsular.
+```{r, label = mapa_TV2019 }
+mapa_TV2019 <- ggplot(incrementos, aes(fill = TV_2019 ))+ 
+  geom_sf()+
+  scale_fill_gradientn(colours = paletteer_c("ggthemes::Red-Blue Diverging", 30), 
+                       name = "% Incremento", 
+                       limits = c(-51,51)) +
+  labs(title = "Variación de precipitaciones en 2019", 
+       subtitle = "Cálculo del incremento de las precipitaciones para el año 2019 respecto al período base" ,
+       fill = "Precipitaciones",
+       caption = "Fuente: AEMET")+
+  coord_sf(datum = NA)+
+   theme(panel.background = element_blank(),
+         plot.title = element_text(size = 14, hjust = 0),
+         plot.subtitle = element_text(color = "grey40",size = 10, hjust = 0),
+    legend.title = element_text(color = "grey40", size = 7),
+    legend.text = element_text(color = "grey40", size = 8, hjust = 0),
+    plot.caption = element_text(color = "grey40", size = 8, hjust = 1),
+         plot.margin = unit(c(0.5,2,0.5,1), "cm"))
+```
+
+```{r, label = mapa_TV2020 }
+mapa_TV2020 <- ggplot(incrementos, aes(fill = TV_2020 ))+ 
+  geom_sf()+
+  scale_fill_gradientn(colours = paletteer_c("ggthemes::Red-Blue Diverging", 30), 
+                       name = "% Incremento", 
+                       limits = c(-51,51)) +
+  labs(title = "Variación de precipitaciones en 2020", 
+       subtitle = "Cálculo del incremento de las precipitaciones para el año 2020 respecto al período base" ,
+       fill = "Precipitaciones",
+       caption = "Fuente: AEMET")+
+  coord_sf(datum = NA)+
+   theme(panel.background = element_blank(),
+         plot.title = element_text(size = 14, hjust = 0),
+         plot.subtitle = element_text(color = "grey40",size = 10, hjust = 0),
+    legend.title = element_text(color = "grey40", size = 7),
+    legend.text = element_text(color = "grey40", size = 8, hjust = 0),
+    plot.caption = element_text(color = "grey40", size = 8, hjust = 1),
+         plot.margin = unit(c(0.5,2,0.5,1), "cm"))
+```
+
+```{r, label = mapa_TV2021}
+mapa_TV2021 <- ggplot(incrementos, aes(fill = TV_2021 ))+ 
+  geom_sf()+
+  scale_fill_gradientn(colours = paletteer_c("ggthemes::Red-Blue Diverging", 30), 
+                       name = "% Incremento", 
+                       limits = c(-51,51)) +
+  labs(title = "Variación de precipitaciones en 2021", 
+       subtitle = "Cálculo del incremento de las precipitaciones para el año 2021 respecto al período base" ,
+       fill = "Precipitaciones",
+       caption = "Fuente: AEMET")+
+  coord_sf(datum = NA)+
+   theme(panel.background = element_blank(),
+         plot.title = element_text(size = 14, hjust = 0),
+         plot.subtitle = element_text(color = "grey40",size = 10, hjust = 0),
+    legend.title = element_text(color = "grey40", size = 7),
+    legend.text = element_text(color = "grey40", size = 8, hjust = 0),
+    plot.caption = element_text(color = "grey40", size = 8, hjust = 1),
+         plot.margin = unit(c(0.5,2,0.5,1), "cm"))
+```
+
+**Visualización de las tasas de variación de las precipitaciones peninsulares en 2019**
+
+Si visualizamos nuestro mapa *Variación de precipitaciones en 2019* observamos, de forma general, tres grupos de provincias. Las que, en 2019,han recibido menos lluvias respecto al promedio de los años de referencia, en tonalidades rojas; las que han recibido más lluvias respecto al mismo período de referencia, en azul; y aquellas con precipitaciones muy similares a los años de referencia, en tonalidades intermedias.
+
+En este año, el suroeste del territorio peninsular ha recibido significativamente menos lluvias en comparación con el período de referencia. Las provincias de Cádiz, Huelva, Málaga y Sevilla vieron una disminución superior al 40% de sus precipitaciones respecto al promedio del período de 1981-2010.
+
+Por otro lado, en el año 2019, las provincias de Alacant/Alicante, Cantabria, Murcia y Asturias han aumentado sus precipitaciones en más del 30% respecto al promedio de los años de referencia.
+```{r, label = max_min_TV2019}
+min_TV2019 <- round(min(incrementos$TV_2019),2)
+min_TV2019_prv <- incrementos$NAMEUNIT[which.min(incrementos$TV_2019)]
+max_TV2019 <- round(max(incrementos$TV_2019),2)
+max_TV2019_prv <- incrementos$NAMEUNIT[which.max(incrementos$TV_2019)]
+
+cat("La provincia de", min_TV2019_prv, "es la provincia que menos lluvias recibió en el año 2019 respecto al período de referencia, un",abs(min_TV2019),"% menos.", "\n")
+
+cat("La provincia de", max_TV2019_prv, "es la provincia que más lluvias recibió en el año 2019 respecto al período de referencia, un",max_TV2019,"% más.","\n")
+```
+```{r, label = representamos_TV2019}
+plot(mapa_TV2019)
+```
+
+**Visualización de las tasas de variación de las precipitaciones peninsulares en 2020**
+
+Nuevamente, al visualizar nuestro mapa *Variación de precipitaciones en 2020* observamos, de forma general,los tres grupos de provincias anteriormente mencionados. 
+
+En este año, destacamos que el este peninsular ha recibido más lluvias en comparación con el período de referencia. En las provincias de Castelló/Castellón, Tarragona, Teruel y Girona aumentaron las precipitaciones más de un 30%.
+
+En el sur y centrosur de la península observamos disminución de las precipitaciones, siendo Almería, Jaén, Granada, Cádiz y Córdoba las más afectadas. 
+```{r, label = max_min_TV2020}
+min_TV2020 <- round(min(incrementos$TV_2020),2)
+min_TV2020_prv <- incrementos$NAMEUNIT[which.min(incrementos$TV_2020)]
+max_TV2020 <- round(max(incrementos$TV_2020),2)
+max_TV2020_prv <- incrementos$NAMEUNIT[which.max(incrementos$TV_2020)]
+
+cat("La provincia de", min_TV2020_prv, "es la provincia que menos lluvias recibió en el año 2020 respecto al período de referencia, un",abs(min_TV2020),"% menos.", "\n")
+
+cat("La provincia de", max_TV2020_prv, "es la provincia que más lluvias recibió en el año 2020 respecto al período de referencia, un",max_TV2020,"% más.","\n")
+```
+```{r, label = representamos_TV2020}
+plot(mapa_TV2020)
+```
+
+**Visualización de las tasas de variación de las precipitaciones peninsulares en 2021**
+
+En nuestra última representación, *Variación de precipitaciones en 2021* siguen presentes los tres grupos de provincias ya mencionados. 
+
+Para el año 2021 observamos como el sur, suroeste y nordeste han recibido cerca de un 30% menos de precipitaciones. Las provincias con mayor descenso de precipitaciones son Málaga, Barcelona, Granada y Girona.
+
+Cantabria y Guadalajara son las provincias que más precipitaciones han recibido respecto al período de referencia.
+```{r, label = max_min_TV2021}
+min_TV2021 <- round(min(incrementos$TV_2021),2)
+min_TV2021_prv <- incrementos$NAMEUNIT[which.min(incrementos$TV_2021)]
+max_TV2021 <- round(max(incrementos$TV_2021),2)
+max_TV2021_prv <- incrementos$NAMEUNIT[which.max(incrementos$TV_2021)]
+
+
+cat("La provincia de", min_TV2021_prv, "es la provincia que menos lluvias recibió en el año 2020 respecto al período de referencia, un",abs(min_TV2021),"% menos.", "\n")
+
+cat("La provincia de", max_TV2021_prv, "es la provincia que más lluvias recibió en el año 2020 respecto al período de referencia, un",max_TV2021,"% más.","\n")
+```
+```{r, label = representamos_TV2021}
+plot(mapa_TV2021)
+```
+
+**Balance de precipitaciones anual en el territorio peninsular español**
+
+Si hablamos en términos totales del territorio peninsular, podemos calcular cuánto ha llovido de más o cuanto de menos en comparación con el promedio de los años de referencia. Para esta caso, obtenemos:
+
+- En 2019, llovió un 1.34% menos que en el promedio del período 1981-2010
+- En 2020, llovió un 2.07% más que en el promedio del período 1981-2010
+- En 2021, llovió un 2.73% menos que en el promedio del período 1981-2010
+
+```{r, label = balance_territorial}
+suma_base <- sum(anual_base$total_base)
+suma_2019 <- sum(anual_2019$total_2019)
+suma_2020 <- sum(anual_2020$total_2020)
+suma_2021 <- sum(anual_2021$total_2021)
+
+tabla_balance <- cbind(c(suma_2019, suma_2020, suma_2021))
+row.names(tabla_balance) <- c("Precipitaciones 2019", "Precipitaciones 2020", "Precipitaciones 2021")
+
+tabla_balance <- cbind(tabla_balance, suma_base)
+
+tv_2019 <- ((suma_2019 - suma_base)/suma_base) * 100
+tv_2020 <- ((suma_2020 - suma_base)/suma_base) * 100
+tv_2021 <- ((suma_2021 - suma_base)/suma_base) * 100
+
+tabla_balance <- cbind(tabla_balance, c(tv_2019, tv_2020, tv_2021))
+
+colnames(tabla_balance) <- c("Sumatorio anual", "Sumatorio referencia", "% Variación")
+
+kable(tabla_balance)
+```
+
+
+# Cierre Notebook I.
+
+Aunque estos cálculos no son útiles sin un contexto específico, como por ejemplo necesitar estudiar las precipitaciones del territorio y sus variaciones, y dado que las precipitaciones en la península ibérica dependen mucho de la zona geográfica y de sus climas asociados, si nos son prácticos para poner en aplicar nuestra capacidad de análisis, creación de nuevas medidas, comparación de variables, y además emplear código.
+
+**Nota:** En los próximos días realizaremos un análisis exploratorio a los datos con observaciones menusales de estos datasets. Aprovecharemos algunos códigos y datasets creados en este primer notebook y realizaremos distintas visualizaciónes, como histogramas.
 
 

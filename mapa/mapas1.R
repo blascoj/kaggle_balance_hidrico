@@ -35,11 +35,23 @@ datos_sf <- subset(datos_sf, Provincia != "Ceuta")
 
 
 
+datos_mapa <-  select(datos_mapa, "NAMEUNIT","geometry")
+
+write_sf(datos_mapa, "/Users/josepblascodominguez/Documents/GitHub/kaggle_balance_h-drico/mapa/datos_mapa.shp")
+
+write_csv(datos_mapa, "/Users/josepblascodominguez/Documents/GitHub/kaggle_balance_h-drico/mapa/datos_mapa.csv")
 
 
 
+capas <- st_layers(  "/Users/josepblascodominguez/Desktop/R/Balance_hidro/lineas_limite/SHP_ETRS89/ll_provinciales_inspire_peninbal_etrs89/ll_provinciales_inspire_peninbal_etrs89.shp")
+capas
+
+datos_sf <- st_read(
+  "/Users/josepblascodominguez/Desktop/R/Balance_hidro/lineas_limite/SHP_ETRS89/ll_provinciales_inspire_peninbal_etrs89/ll_provinciales_inspire_peninbal_etrs89.shp", layer ="ll_provinciales_inspire_peninbal_etrs89")
 
 
 
-
+ggplot(datos_sf)+
+  geom_sf()
+  
 
